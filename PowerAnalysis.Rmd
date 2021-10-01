@@ -10,7 +10,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
 
 #libraries
 library(RODBC)
@@ -19,6 +19,7 @@ library(knitr)
 library(nortest) # provides anderson-darling test for normality
 library(lmtest) # provides durbin-watson test for serial autocorrelation
 library(emon) # various power test functions using simulation as well as an alternative mannkendall function
+library(ggrepel) # for nice point labels
 
 source("functions.R")
 
@@ -47,7 +48,7 @@ odbcClose(channel)
 #   mutate(cor.test.kendall=list(cor.test(data$Value, data$YearC, alternative="two.sided", exact=FALSE, method="kendall"))) %>%
 #   mutate(kendall.pvalue=as.numeric(cor.test.kendall[3])) %>%
 #   mutate(emon.mk=list(mannkendall(data$YearC, data$Value, nsims.mk=1000))) %>% mutate(emon.mk.pvalue=as.numeric(emon.mk[1]))
-save(df, file="data/df.Rdata")
+# save(df, file="data/df.Rdata")
 
 # load data table with above calculations
 load("data/df.Rdata")
@@ -65,7 +66,7 @@ df.10yr <- rbind(df_phos, df_secc, df_chla, df_spr) %>% filter(Year >= 2011)
 ## What standard deviation should we use?
 ### Variability depends on TP concentration
 
-```{r normalTests}
+```{r}
 # significance tests:  kendall using base r, kendall using emon (iterative), durbin-watson for serial correlation
 df_sign <- df[c("LakeID","param", "nYears", "kendall.pvalue", "emon.mk.pvalue", "dw.pvalue", "normality.pvalue", "lognormality.pvalue", "adnormality.pvalue", "adlognormality.pvalue")] %>% mutate(kendall.sign=ifelse(kendall.pvalue<.05, "sign", "n.s.")) %>% mutate(emon.mk.sign=ifelse(emon.mk.pvalue<.05, "sign", "n.s.")) %>% mutate(dw.sign=ifelse(dw.pvalue<.05, "sign", "n.s.")) %>% mutate(normality.sign=ifelse(normality.pvalue<.05, "sign", "n.s.")) %>% mutate(lognormality.sign=ifelse(lognormality.pvalue<.05, "sign", "n.s.")) %>% mutate(adnormality.sign=ifelse(adnormality.pvalue<.05, "sign", "n.s.")) %>% mutate(adlognormality.sign=ifelse(adlognormality.pvalue<.05, "sign", "n.s."))
 
@@ -78,18 +79,24 @@ lmpPhosSign <- subset(df_sign[df_sign$param=="lmpPhos",])  # 61 lakes shapiro te
 
 ```
 
-### Only a few lakes have annual mean datasets that are not normally distributed even after log transformation
-
-```{r normalTable}
-tableData <-lmpPhosSign %>% select(LakeID, lognormality.sign) %>% filter(lognormality.sign=="sign")
-kable(tableData)
-```
 
 ### Standard deviation of annual means is correlated with annual mean phosphorus
 
 ```{r}
-#data <- df_sign %>% select()
+data <- df %>% data.frame() %>% unnest(mean) %>% unnest(sd) %>% select(LakeID, param, mean, sd) %>% filter(param=="lmpPhos") 
 
+ggplot(data, aes(x=sd, y=mean)) +
+  geom_point() +
+  geom_smooth() +
+  geom_label_repel(aes(label=LakeID)) +
+  scale_y_log10(breaks=c(5,seq(10,50,10),100,300)) +
+  theme_bw()
 ```
 
+### Only a few lakes have annual mean datasets that are not normally distributed even after log transformation
 
+```{r}
+# note: data.frame() converts from tibble to data.frame to get rid of hidden grouping variable
+tableData <-lmpPhosSign %>% data.frame() %>% select(LakeID, lognormality.sign) %>% filter(lognormality.sign=="sign") 
+kable(tableData)
+```
