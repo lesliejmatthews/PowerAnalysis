@@ -1,6 +1,6 @@
 ---
 title: "Testing GitHub Markdown"
-author: "Me"
+author: "Leslie"
 date: "10/1/2021"
 output: html_document
 ---
