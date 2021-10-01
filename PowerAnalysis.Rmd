@@ -98,7 +98,6 @@ p <- ggplot(data, aes(x=sd, y=mean, label=LakeID)) +
 
 ggplotly(p)
 
-# testing revert for real this time  xxxx
 
 ```
 
