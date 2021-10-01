@@ -1,0 +1,69 @@
+---
+title: "Power Analysis"
+author: "Leslie"
+date: "10/1/2021"
+output: 
+  html_document:
+    keep_md: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+#libraries
+library(RODBC)
+library(tidyverse)
+library(knitr)
+
+# retrieve data
+channel <- odbcDriverConnect('driver={SQL Server};server=anrgdb;database=WQdata;trusted_connection=true')
+df_phos <- sqlQuery(channel, "SELECT LakeID, Year, Phos as Value, 'lmpPhos' as 'param' FROM dbo.LayData_AnnualMeans_Sta1 WHERE dayssampled_phos>=8")
+df_secc <- sqlQuery(channel, "SELECT LakeID, Year, Secc as Value, 'lmpSecc' as 'param' FROM dbo.LayData_AnnualMeans_Sta1 WHERE dayssampled_secc>=8")
+df_chla <- sqlQuery(channel, "SELECT LakeID, Year, Chla as Value, 'lmpChla' as 'param' FROM dbo.LayData_AnnualMeans_Sta1 WHERE dayssampled_chla>=8")
+df_spr <- sqlQuery(channel, "SELECT LakeID, Year, SprTP as Value, 'SprTP' as 'param' FROM dbo.SprData_AnnualMeans_Sta1 WHERE SprTP is not null")
+odbcClose(channel)
+
+# calculate normality tests, linear model, etc.
+# df <- rbind(df_phos, df_secc, df_chla, df_spr) %>%
+#   mutate(LakeID=as.character(LakeID)) %>% mutate(param=as.character(param)) %>% mutate(YearC=Year-1980) %>%
+#   nest_by(LakeID, param) %>%
+#   mutate(nYears=list(nrow(data))) %>% filter(nYears>=5) %>%
+#   mutate(mean=list(round(mean(data$Value),1))) %>% mutate(sd=list(round(sd(data$Value),1))) %>%
+#   mutate(pvalue=list(round(pvalue(data$Value, data$YearC),4))) %>% mutate(cv=round(sd/mean,3)) %>%
+#   mutate(cv_mean=round(sd/(sqrt(sd)*mean),3)) %>%
+#   mutate(lm=list(lm(data=data, Value~YearC))) %>%
+#   mutate(dw=list(dwtest(lm))) %>% mutate(dw.pvalue=as.numeric(dw[4])) %>%
+#   mutate(normality=list(shapiro.test(data$Value))) %>% mutate(normality.pvalue=as.numeric(normality[2])) %>%
+#   mutate(lognormality=list(shapiro.test(log(data$Value)))) %>% mutate(lognormality.pvalue=as.numeric(lognormality[2])) %>%
+#   mutate(adnormality=(ifelse(nYears>7,list(ad.test(data$Value)), list(-1)))) %>% mutate(adnormality.pvalue=as.numeric(adnormality[2])) %>%
+#   mutate(adlognormality=(ifelse(nYears>7,list(ad.test(log(data$Value))), list(-1)))) %>% mutate(adlognormality.pvalue=as.numeric(adlognormality[2])) %>%
+#   mutate(cor.test.kendall=list(cor.test(data$Value, data$YearC, alternative="two.sided", exact=FALSE, method="kendall"))) %>%
+#   mutate(kendall.pvalue=as.numeric(cor.test.kendall[3])) %>%
+#   mutate(emon.mk=list(mannkendall(data$YearC, data$Value, nsims.mk=1000))) %>% mutate(emon.mk.pvalue=as.numeric(emon.mk[1]))
+# save(df, file="data/df.Rdata")
+
+# load data table with above calculations
+load("data/df.Rdata")
+```
+
+## What standard deviation should we use?
+### Variability depends on TP concentration
+
+```{r normSignTable}
+# significance tests:  kendall using base r, kendall using emon (iterative), durbin-watson for serial correlation
+df_sign <- df[c("LakeID","param", "nYears", "kendall.pvalue", "emon.mk.pvalue", "dw.pvalue", "normality.pvalue", "lognormality.pvalue", "adnormality.pvalue", "adlognormality.pvalue")] %>% mutate(kendall.sign=ifelse(kendall.pvalue<.05, "sign", "n.s.")) %>% mutate(emon.mk.sign=ifelse(emon.mk.pvalue<.05, "sign", "n.s.")) %>% mutate(dw.sign=ifelse(dw.pvalue<.05, "sign", "n.s.")) %>% mutate(normality.sign=ifelse(normality.pvalue<.05, "sign", "n.s.")) %>% mutate(lognormality.sign=ifelse(lognormality.pvalue<.05, "sign", "n.s.")) %>% mutate(adnormality.sign=ifelse(adnormality.pvalue<.05, "sign", "n.s.")) %>% mutate(adlognormality.sign=ifelse(adlognormality.pvalue<.05, "sign", "n.s."))
+
+# counts of lmpPhos lakes with significant distribution tests
+lmpPhosSign <- subset(df_sign[df_sign$param=="lmpPhos",])  # 61 lakes shapiro test
+# nrow(subset(lmpPhosSign[lmpPhosSign$normality.sign=="sign",])) # 13 are not normal shapiro test
+# nrow(subset(lmpPhosSign[lmpPhosSign$lognormality.sign=="sign",])) # 7 are not normal shapiro test
+# nrow(subset(lmpPhosSign[lmpPhosSign$adnormality.sign=="sign",])) # 22 are not normal anderson-darling test
+# nrow(subset(lmpPhosSign[lmpPhosSign$adlognormality.sign=="sign",])) # 19  are not normal anderson-darling test
+
+tableData <-lmpPhosSign %>% select(LakeID, lognormality.sign) %>% filter(lognormality.sign=="sign")
+kable(tableData)
+
+```
+
