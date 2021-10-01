@@ -20,6 +20,7 @@ library(nortest) # provides anderson-darling test for normality
 library(lmtest) # provides durbin-watson test for serial autocorrelation
 library(emon) # various power test functions using simulation as well as an alternative mannkendall function
 library(ggrepel) # for nice point labels
+library(plotly)
 
 source("functions.R")
 
@@ -85,12 +86,20 @@ lmpPhosSign <- subset(df_sign[df_sign$param=="lmpPhos",])  # 61 lakes shapiro te
 ```{r}
 data <- df %>% data.frame() %>% unnest(mean) %>% unnest(sd) %>% select(LakeID, param, mean, sd) %>% filter(param=="lmpPhos") 
 
-ggplot(data, aes(x=sd, y=mean)) +
+p <- ggplot(data, aes(x=sd, y=mean, label=LakeID)) +
   geom_point() +
   geom_smooth() +
-  geom_label_repel(aes(label=LakeID)) +
+  #geom_label_repel(aes(label=LakeID), max.overlaps = 40) +
+  #geom_text(aes(label=LakeID)) +
   scale_y_log10(breaks=c(5,seq(10,50,10),100,300)) +
+  ylab("Annual Mean TP ug/L") +
+  xlab("Standard Deviation") +
   theme_bw()
+
+ggplotly(p)
+
+# testing revert
+
 ```
 
 ### Only a few lakes have annual mean datasets that are not normally distributed even after log transformation
