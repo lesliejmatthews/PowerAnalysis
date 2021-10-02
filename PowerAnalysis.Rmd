@@ -2,7 +2,7 @@
 title: "Power Analysis"
 author: "Leslie"
 date: "10/1/2021"
-output: 
+output: #slidy_presentation
   html_document:
     keep_md: true
 editor_options: 
@@ -10,8 +10,11 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
-
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
 #libraries
 library(RODBC)
 library(tidyverse)
@@ -20,6 +23,7 @@ library(nortest) # provides anderson-darling test for normality
 library(lmtest) # provides durbin-watson test for serial autocorrelation
 library(emon) # various power test functions using simulation as well as an alternative mannkendall function
 library(ggrepel) # for nice point labels
+library(pwr) # for t test power
 library(plotly)
 
 source("functions.R")
@@ -64,8 +68,50 @@ df.10yr <- rbind(df_phos, df_secc, df_chla, df_spr) %>% filter(Year >= 2011)
 
 ```
 
+## Samples needed to achieve 80% power given annual mean and standard deviation
+
+```{r}
+# number of samples needed given annual mean and stdev to detect with 80% probability that a lake is greater than 12 ug/L
+# note: pwr.t.test is from the pwr package
+annual.mean <- seq(5,12,.5)
+st.dev <- seq(1,10,1)
+output <- data.frame(annual.mean=numeric(), st.dev=numeric(), effect.size=numeric(), n=numeric())
+for (i in annual.mean) {
+  for (j in st.dev) {
+    d = (i-12)/j
+    try <- tryCatch(
+      {test <- pwr.t.test(sig.level=0.05, d=d, power=0.8, type="one.sample", alternative="less")}, error=function(e) {"error"}
+    )
+  suppressWarnings(
+    if (try=="error") {
+      n = 0
+    } else {
+      n = test$n
+    }
+  )
+  output[nrow(output)+1,] <- c(i,j, d, n)
+  }
+}
+
+ggplot(output, aes(x=annual.mean, y=n)) +
+  geom_point(size=1.5, aes(color=as.factor(st.dev))) +
+  geom_line(size=1, aes(color=as.factor(st.dev))) +
+  xlab("annual.mean") +
+  ylab("Number of Samples") +
+  guides(color = guide_legend(reverse=TRUE, title="Standard\nDeviation" )) +
+  #scale_y_continuous(breaks=seq(0,600,20)) +
+  theme_bw() 
+# get color
+
+
+
+
+
+
+```
+
+
 ## What standard deviation should we use?
-### Variability depends on TP concentration
 
 ```{r}
 # significance tests:  kendall using base r, kendall using emon (iterative), durbin-watson for serial correlation
@@ -98,8 +144,29 @@ p <- ggplot(data, aes(x=sd, y=mean, label=LakeID)) +
 
 ggplotly(p)
 
-# now I'm adding something that I will commit
 ```
+
+### Remove Shelburne and Arrowhead
+
+```{r}
+data <- df %>% data.frame() %>% unnest(mean) %>% unnest(sd) %>% select(LakeID, param, mean, sd) %>% filter(param=="lmpPhos") %>%
+  filter(LakeID != "SHELBURNE" & LakeID != "ARROWHEAD MOUNTAIN")
+
+p <- ggplot(data, aes(x=sd, y=mean, label=LakeID)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  #geom_label_repel(aes(label=LakeID), max.overlaps = 40) +
+  #geom_text(aes(label=LakeID)) +
+  scale_y_log10(breaks=c(5,seq(10,50,10),100,300)) +
+  ylab("Annual Mean TP ug/L") +
+  xlab("Standard Deviation") +
+  theme_bw()
+
+ggplotly(p)
+
+```
+
+### What if we don't have anything but Spring TP - use Spring TP to establish standard deviation?
 
 ### Only a few lakes have annual mean datasets that are not normally distributed even after log transformation
 
